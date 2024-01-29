@@ -7,7 +7,24 @@ components:
   properties: {}
   name: content_panel
   layout_properties: {slot: default}
+  components: []
 - type: FlowPanel
   properties: {}
   name: navbar_links
   layout_properties: {slot: nav-right}
+  components: []
+- name: flow_panel_1
+  properties: {vertical_align: middle, spacing_above: none}
+  type: FlowPanel
+  layout_properties: {slot: title}
+  components:
+  - name: image_1
+    properties: {source: 'https://cdn4.iconfinder.com/data/icons/google-i-o-2016/512/google_firebase-512.png',
+      height: '38', display_mode: shrink_to_fit, spacing_above: none, spacing_below: none}
+    type: Image
+    layout_properties: {width: 38}
+  - name: headline_1
+    properties: {role: headline, text: FIREBASE FOR ANVIL, align: center, spacing_above: none,
+      spacing_below: none}
+    type: Label
+    layout_properties: {}

@@ -1,8 +1,15 @@
 unique_ids:
   forms:
     Form1: KTAJ2M7OALGGNMBLO3PBW6H64JF3LAEL
-  modules: {}
-  server_modules: {}
+  modules:
+    client: '1706539581161333301094641.7663'
+    client_utils: '1706539611552224722196864.7053'
+    messages: '1706539883847301887440828.5463'
+    validators: '1706539634850281215636437.5804'
+  server_modules:
+    server: '1706539657986318905575056.3745'
+    server_utils: '1706539670907239053924389.68588'
   assets:
+    fb-service-worker.js: '1706539741723472411156052.5588'
     standard-page.html: 2XCDDGT375EDHDBL3LX26RNUM5FHSBNP
     theme.css: P7H7ZWPZSBJFDXNH5K4XAAWCATURA3RN
