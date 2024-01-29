@@ -5,11 +5,6 @@ from dataclasses import dataclass
 
 from firebase_admin import credentials, initialize_app, messaging
 
-@anvil.server.callable
-def get_file_content():
-    with open("/_/theme/Docs/QuickStart.md", "r") as file:
-        return file.read()
-
 @dataclass
 class FCMServiceAccountCredentials:
     """

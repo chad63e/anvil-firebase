@@ -10,5 +10,6 @@ class Form1(Form1Template):
         self.init_components(**properties)
 
         # Any code you write here will run before the form opens.
-        doc_content = anvil.server.call('get_file_content')
-        self.rich_text_1.content = doc_content
+        doc_url = f"{anvil.server.get_app_origin()}/_/theme/Docs/QuickStart.md"
+        with open(doc_url, "r") as file:
+            self.rich_text_1.content = file.read()
