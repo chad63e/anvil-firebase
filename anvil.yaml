@@ -7,7 +7,11 @@ native_deps: {head_html: '<script src="https://www.gstatic.com/firebasejs/8.10.1
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-messaging.js"></script>
 
     '}
-runtime_options: {version: 2, client_version: '3', server_version: python3-full, server_spec: null}
+runtime_options:
+  version: 2
+  client_version: '3'
+  server_version: python3-full
+  server_spec: {base: python310-standard}
 metadata: {title: Anvil Firebase, description: Firebase Intergration for Anvil, logo_img: 'https://cdn4.iconfinder.com/data/icons/google-i-o-2016/512/google_firebase-512.png'}
 services:
 - source: /runtime/services/tables.yml

@@ -7,7 +7,11 @@ components:
   properties: {}
   name: content_panel
   layout_properties: {slot: default}
-  components: []
+  components:
+  - name: rich_text_1
+    properties: {}
+    type: RichText
+    layout_properties: {grid_position: 'DNLVJZ,YAGRGU'}
 - type: FlowPanel
   properties: {}
   name: navbar_links
