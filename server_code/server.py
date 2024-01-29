@@ -21,7 +21,7 @@ from .messages import (
 from .server_utils import FCMServiceAccountCredentials
 
 
-class FirebaseServer:
+class FirebaseMessaging:
     def __init__(self, with_logging: Optional[bool] = True):
         self.with_logging = with_logging
 
