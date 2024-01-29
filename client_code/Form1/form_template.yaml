@@ -7,7 +7,17 @@ components:
   properties: {}
   name: content_panel
   layout_properties: {slot: default}
-  components: []
+  components:
+  - name: rich_text_1
+    properties: {content: '**DOCS:** {link}'}
+    type: RichText
+    layout_properties: {grid_position: 'ECDVNJ,HVZBAG'}
+    components:
+    - name: link_1
+      properties: {text: Click here to navigate to docs, role: text}
+      type: Link
+      layout_properties: {slot: link}
+      event_bindings: {click: link_1_click}
 - type: FlowPanel
   properties: {}
   name: navbar_links
