@@ -336,7 +336,12 @@ class FirebaseClient:
             bool: True if the action map was successfully added, False otherwise.
         """
         try:
-            self.registration.active.postMessage(
+            sw = (
+                self.registration.active
+                or self.registration.waiting
+                or self.registration.installing
+            )
+            sw.postMessage(
                 {
                     "type": "ADD_ACTION_MAP",
                     "actionName": action_map.action_name,
@@ -464,7 +469,12 @@ class FirebaseClient:
             return
 
         try:
-            self.registration.active.postMessage(
+            sw = (
+                self.registration.active
+                or self.registration.waiting
+                or self.registration.installing
+            )
+            sw.postMessage(
                 {"type": "SET_FIREBASE_CONFIG", "firebaseConfig": self.config.to_dict()}
             )
             self._log("Firebase config sent to service worker.")
