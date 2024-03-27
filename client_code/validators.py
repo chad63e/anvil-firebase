@@ -5,6 +5,7 @@ import re
 class Validators:
     @staticmethod
     def validate_string(string, prop_name: str, optional: bool = False):
+        print(f"Validate String: {string} | {type(string)}")
         if string is None and not optional:
             raise ValueError(f"{prop_name} is required.")
         elif optional and not string:

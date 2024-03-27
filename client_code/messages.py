@@ -479,18 +479,30 @@ class Response:
         exception = None
 
         print(f"from_fcm_response: {response}")
+        try:
+            print(F"ERROR: {response.error}")
+        except:
+            try:
+                print(f"ERROR 2: {response.exception}")
+            except:
+                pass
+                
         if isinstance(response, str):
+            print("response is a str")
             parts = response.split("/messages/")
             if len(parts) >= 2:
                 message_id = parts[1]
                 success = True
         elif isinstance(response, Exception):
+            print("response is an Exception")
             exception = str(response)
         else:
             # Try to extract success, message_id, and exception from response
+            print("response else")
             success = cls._extract_success(response)
             message_id = cls._extract_attribute(response, "message_id")
-            exception = cls._extract_attribute(response, "exception")
+            exception = cls._extract_attribute(response, "exception") or cls._extract_attribute(response, "error")
+            print(f"\nEXCEPTION: {exception} | {type(exception)}")
             if not isinstance(exception, str):
                 exception = None
 
@@ -559,15 +571,17 @@ class BatchResponse:
         except Exception:
             failure_count = 0
 
-        responses = []
+        process_responses = []
         for response in response.responses:
             try:
-                responses.append(Response.from_fcm_response(response))
+                rsp_obj = Response.from_fcm_response(response)
+                print(f"Response Obj: {rsp_obj}")
+                process_responses.append(rsp_obj)
             except Exception as e:
                 print(f"Error appending response to responses: {e}")
                 
         return cls(
-            responses,
+            process_responses,
             success_count,
             failure_count,
         )
