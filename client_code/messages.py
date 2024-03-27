@@ -478,6 +478,7 @@ class Response:
         message_id = None
         exception = None
 
+        print(f"from_fcm_response: {response}")
         if isinstance(response, str):
             parts = response.split("/messages/")
             if len(parts) >= 2:
@@ -490,6 +491,10 @@ class Response:
             success = cls._extract_success(response)
             message_id = cls._extract_attribute(response, "message_id")
             exception = cls._extract_attribute(response, "exception")
+            if not isinstance(exception, str):
+                exception = None
+
+            print(f"\nEXCEPTION: {exception}")
 
         return cls(success=success, message_id=message_id, exception=exception)
 
@@ -556,7 +561,11 @@ class BatchResponse:
 
         responses = []
         for response in response.responses:
-            responses.append(Response.from_fcm_response(response))
+            try:
+                responses.append(Response.from_fcm_response(response))
+            except Exception as e:
+                print(f"Error appending response to responses: {e}")
+                
         return cls(
             responses,
             success_count,
