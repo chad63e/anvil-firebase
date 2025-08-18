@@ -1,11 +1,26 @@
+"""
+Portable classes and helpers for Firebase Cloud Messaging (client-side).
+
+Provides:
+- Webpush notification models (actions, notification, webpush config)
+- Message types (Message, MulticastMessage, SimpleMessage)
+- Response types (Response, BatchResponse, TopicManagementResponse)
+
+All classes are decorated with @anvil.server.portable_class for client/server transport.
+"""
+
 import anvil.server
 
 from .client_utils import DataSerializer
 from .validators import Validators
 
+# MARK: Webpush entities
+
 
 @anvil.server.portable_class
 class FCMOptions:
+    """Options for FCM analytics metadata associated with a message."""
+
     def __init__(self, analytics_label: str = None):
         """
         Initializes a new instance of the FCMOptions class.
@@ -30,6 +45,8 @@ class FCMOptions:
 
 @anvil.server.portable_class
 class WebpushNotificationAction:
+    """Single action button definition for a webpush notification."""
+
     def __init__(self, action: str, title: str, icon: str = None):
         """
         Initializes a new instance of the WebpushNotificationAction class.
@@ -56,6 +73,8 @@ class WebpushNotificationAction:
 
 @anvil.server.portable_class
 class WebpushNotification:
+    """Notification content and behavior fields for webpush delivery."""
+
     def __init__(
         self,
         title: str = None,
@@ -157,6 +176,8 @@ class WebpushNotification:
 
 @anvil.server.portable_class
 class WebpushFCMOptions:
+    """Webpush-specific FCM options (e.g., link to open on click)."""
+
     def __init__(self, link: str = None):
         """
         Initializes a new instance of the WebpushFcmOptions class.
@@ -177,8 +198,13 @@ class WebpushFCMOptions:
         return DataSerializer.serialize(self, ["link"])
 
 
+# MARK: - Webpush configuration
+
+
 @anvil.server.portable_class
 class WebpushConfig:
+    """Webpush transport configuration: headers, data, notification, options."""
+
     def __init__(
         self,
         headers: dict = None,
@@ -218,8 +244,13 @@ class WebpushConfig:
         )
 
 
+# MARK: Message types
+
+
 @anvil.server.portable_class
 class Message:
+    """Base message envelope for FCM with optional webpush config and data."""
+
     def __init__(
         self,
         data: dict = None,
@@ -283,6 +314,8 @@ class Message:
 
 @anvil.server.portable_class
 class MulticastMessage:
+    """Message envelope targeting multiple registration tokens."""
+
     def __init__(
         self,
         data: dict = None,
@@ -342,6 +375,8 @@ class MulticastMessage:
 
 @anvil.server.portable_class
 class SimpleMessage(Message):
+    """Convenience message that builds a WebpushNotification from common fields."""
+
     def __init__(
         self,
         title: str,
@@ -442,8 +477,13 @@ class SimpleMessage(Message):
         )
 
 
+# MARK: Response types
+
+
 @anvil.server.portable_class
 class Response:
+    """Result of sending a single FCM message (success/id or exception)."""
+
     def __init__(self, success: bool, message_id: str = None, exception: str = None):
         """
         Initializes a new instance of the Response class.
@@ -522,6 +562,8 @@ class Response:
 
 @anvil.server.portable_class
 class BatchResponse:
+    """Aggregate result for multicast/batch sends (counts and per-item results)."""
+
     def __init__(self, responses: list, success_count: int, failure_count: int):
         """
         Initializes a new instance of the BatchResponse class.
@@ -547,9 +589,9 @@ class BatchResponse:
     @classmethod
     def from_fcm_response(cls, response):
         try:
-            responses = response.responses
+            resp_items = response.responses
         except Exception:
-            responses = []
+            resp_items = []
 
         try:
             success_count = response.success_count
@@ -561,9 +603,7 @@ class BatchResponse:
         except Exception:
             failure_count = 0
 
-        process_responses = []
-        for response in response.responses:
-            process_responses.append(Response.from_fcm_response(response))
+        process_responses = [Response.from_fcm_response(r) for r in resp_items]
 
         return cls(
             process_responses,
@@ -574,6 +614,8 @@ class BatchResponse:
 
 @anvil.server.portable_class
 class TopicManagementResponse:
+    """Result of subscribing/unsubscribing to a topic (counts and errors)."""
+
     def __init__(self, success_count: int, failure_count: int, errors: list):
         """
         Initializes a new instance of the TopicManagementResponse class.

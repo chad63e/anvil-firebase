@@ -1,0 +1,19 @@
+[tool.ruff]
+# Match Anvil's Python 3.10 server baseline; client code is transpiled but fine to target 3.10.
+target-version = "py310"
+
+[tool.ruff.lint]
+# Keep default rules, and add flake8-tidy-imports (TID) to enable banned-api.
+extend-select = ["TID"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+# Ban any __future__ imports. This will flag lines like:
+#   from __future__ import annotations
+#   from __future__ import ...
+# Note: Ruff cannot stop an editor from inserting the line; it will report a lint error.
+"__future__".msg = "Do not use __future__ imports in Anvil client_code."
+
+[tool.ruff.lint.per-file-ignores]
+# Ignore the ban in server_code; enforce it in client_code.
+# (client_code/**/*.py is intentionally NOT ignored.)
+"server_code/**/*.py" = ["TID251"]

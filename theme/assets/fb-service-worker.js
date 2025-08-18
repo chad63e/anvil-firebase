@@ -1,27 +1,75 @@
+/**
+ * Firebase Cloud Messaging (FCM) Service Worker for Anvil
+ *
+ * Responsibilities:
+ * - Initialize Firebase v8 Messaging in the service worker context.
+ * - Receive configuration and action maps from the client via postMessage.
+ * - Display background notifications and handle notification action clicks.
+ * - Fast-activate on install and claim existing clients on activate.
+ *
+ * Notes:
+ * - This worker is served under `/_/theme/` in Anvil, which is acceptable for FCM background
+ *   notifications when the client binds messaging to this registration via `messaging.useServiceWorker(...)`.
+ * - Uses the Firebase Web SDK v8 API (`setBackgroundMessageHandler`) for current compatibility.
+ */
+
 // Import the Firebase scripts
 importScripts('https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js');
 importScripts('https://www.gstatic.com/firebasejs/8.10.1/firebase-messaging.js');
 
 
+// MARK: State
+
 // Initialize Firebase Notification Actions Map
 let actionMaps = {};
 
 
-// Add event listeners
+// MARK: Lifecycle & event listeners
+
+self.addEventListener('install', (event) => {
+    self.skipWaiting();
+});
+self.addEventListener('activate', (event) => {
+    event.waitUntil(self.clients.claim());
+});
 self.addEventListener('message', handleMessageEvent);
 self.addEventListener('notificationclick', handleNotificationClickEvent);
 
 
+// MARK: - Types
+
 /**
- * Handles incoming messages from the main thread.
- * 
- * @param {MessageEvent} event - The message event.
- * 
- * If the message type is 'SET_FIREBASE_CONFIG', it initializes Firebase with the provided configuration.
- * If the message type is 'ADD_ACTION_MAP', it adds a new action map with the provided details.
- * The action map includes the URL, parameters, data, and Bearer authorization key for the action.
- * 
- * Any errors that occur during the handling of the message event are caught and logged to the console.
+ * @typedef {Object} ActionMap
+ * @property {string} url - Absolute or relative URL to execute for this action.
+ * @property {Object<string, string>} [params] - Query parameters appended to the URL (non-API flows).
+ * @property {Object<string, any>} [data] - JSON body merged with FCM identifiers (API flows).
+ * @property {string} [authKey] - Bearer token used as `Authorization: Bearer <authKey>` for API calls.
+ */
+
+/**
+ * @typedef {Object} FirebaseConfig
+ * @property {string} apiKey
+ * @property {string} authDomain
+ * @property {string} projectId
+ * @property {string} storageBucket
+ * @property {string} messagingSenderId
+ * @property {string} appId
+ * @property {string} [measurementId]
+ */
+
+// MARK: - Message channel handlers
+
+/**
+ * Handle messages from controlled clients (window contexts).
+ *
+ * Recognized message shapes:
+ * - { type: 'SET_FIREBASE_CONFIG', firebaseConfig: FirebaseConfig }
+ * - { type: 'ADD_ACTION_MAP', actionName: string, fullUrl: string, params?: Object, data?: Object, authKey?: string }
+ *
+ * @param {MessageEvent} event - postMessage payload from a controlled client.
+ * @returns {void}
+ *
+ * Errors are caught and logged to avoid terminating the service worker event.
  */
 function handleMessageEvent(event) {
     try {
@@ -41,13 +89,16 @@ function handleMessageEvent(event) {
 }
 
 
+// MARK: - Notification click handling
+
 /**
- * Handles click events on notifications.
- * 
- * @param {NotificationEvent} event - The notification event.
- * 
- * The function prevents the default action, retrieves the action name, FCM message ID, and sender ID from the notification data,
- * and if an action map for the action name exists, it handles the action. Finally, it closes the notification.
+ * Handle click events on displayed notifications.
+ *
+ * Uses event.waitUntil(...) to extend the lifetime while the async action runs.
+ * The notification data is expected to contain { fcmMessageId, from } as provided by FCM.
+ *
+ * @param {NotificationEvent} event
+ * @returns {void}
  */
 function handleNotificationClickEvent(event) {
     event.preventDefault();
@@ -64,46 +115,49 @@ function handleNotificationClickEvent(event) {
 }
 
 
+// MARK: - Action routing
+
 /**
- * Handles the specified action.
- * 
- * @param {string} actionName - The name of the action to handle.
- * @param {string} fcmMessageId - The Firebase Cloud Messaging message ID.
- * @param {string} fromId - The sender ID.
- * 
- * The function retrieves the action from the action maps using the action name. If the action is not found, it logs an error and returns.
- * If the action's URL includes '/_/api/', it calls `handleServerUrl` with the action, FCM message ID, and sender ID.
- * Otherwise, it calls `handleClientUrl` with the action.
+ * Resolve an action name to an ActionMap and perform it.
+ *
+ * - API URLs (containing '/_/api/') trigger a POST via handleServerUrl.
+ * - Other URLs open a client window via handleClientUrl.
+ *
+ * @param {string} actionName
+ * @param {string} fcmMessageId
+ * @param {string} fromId
+ * @returns {Promise<void>} Settles when the action completes or is skipped.
  */
 function handleAction(actionName, fcmMessageId, fromId) {
     const action = actionMaps[actionName];
 
     if (!action) {
         console.error(`Action not found: ${actionName}`);
-        return;
+        return Promise.resolve();
     }
 
     const { url } = action;
 
     if (url.includes('/_/api/')) {
-        handleServerUrl(action, fcmMessageId, fromId);
+        return handleServerUrl(action, fcmMessageId, fromId);
     } else {
-        handleClientUrl(action);
+        return handleClientUrl(action);
     }
 }
 
 
+// MARK: - Server/API action
+
 /**
- * Handles server URLs by making a POST request to the specified URL.
- * 
- * @param {Object} action - The action object containing the URL, authorization key, data, and parameters.
- * @param {string} fcmMessageId - The Firebase Cloud Messaging message ID.
- * @param {string} fromId - The sender ID.
- * 
- * The function creates a URL object from the action's URL and adds any parameters to the URL.
- * It then makes a POST request to the URL with the FCM message ID, sender ID, and any additional data from the action.
- * If the action includes an authorization key, it is included as a Bearer token in the 'Authorization' header of the request.
- * If an error occurs during the fetch operation, it is logged to the console.
+ * Handle server/API action via POST to the specified URL.
+ *
+ * @param {ActionMap} action - The action details including URL and optional token/body/params.
+ * @param {string} fcmMessageId - Firebase Cloud Messaging message ID.
+ * @param {string} fromId - Sender ID (from payload).
+ * @returns {Promise<void>} Resolves after the fetch completes (errors are logged and swallowed).
+ *
+ * Creates a URL with optional query params, sets JSON headers and optional Bearer auth, then POSTs a JSON body
+ * containing { fcmMessageId, fromId, ...action.data }.
  */
 function handleServerUrl(action, fcmMessageId, fromId) {
     const { url, authKey, data, params } = action;
@@ -124,43 +178,44 @@ function handleServerUrl(action, fcmMessageId, fromId) {
         Object.keys(params).forEach(key => urlObj.searchParams.append(key, params[key]));
     }
 
-    fetch(urlObj.toString(), {
+    return fetch(urlObj.toString(), {
         method: 'POST',
         headers: headers,
         body: JSON.stringify({ fcmMessageId, fromId, ...data })
-    })
-        .catch(error => {
-            console.error('Error calling server URL:', error);
-        });
+    }).catch(error => {
+        console.error('Error calling server URL:', error);
+    });
 }
 
 
+// MARK: - Client/window action
+
 /**
- * Handles client URLs by opening a new window with the specified URL.
- * 
- * @param {Object} action - The action object containing the URL.
- * 
- * The function creates a new URL object from the action's URL and the service worker's location origin.
- * It then attempts to open a new window with this URL.
- * If an error occurs during the window opening operation, it is logged to the console.
+ * Handle client URL by opening a new window (or focusing an existing one if supported).
+ *
+ * @param {ActionMap} action - The action object containing the URL.
+ * @returns {Promise<void>} Resolves after attempting to open a window (errors are logged and swallowed).
+ *
+ * Creates a fully-qualified URL relative to this worker's origin and uses clients.openWindow.
  */
 function handleClientUrl(action) {
     const url = new URL(action.url, self.location.origin).href;
 
-    clients.openWindow(url).catch(error => {
+    return clients.openWindow(url).catch(error => {
         console.error('Error opening new window:', error);
     });
 }
 
 
+// MARK: - Firebase initialization
+
 /**
- * Initializes Firebase with the provided configuration.
- * 
- * @param {Object} firebaseConfig - The Firebase configuration object.
- * 
- * The function checks if Firebase has already been initialized. If not, it initializes Firebase with the provided configuration.
- * The configuration object should include the API key, auth domain, project ID, storage bucket, messaging sender ID, app ID, and measurement ID.
- * After initializing Firebase, it calls `initializeFirebaseMessaging` to initialize Firebase Messaging.
+ * Initialize Firebase with the provided configuration.
+ *
+ * @param {FirebaseConfig} firebaseConfig - Firebase configuration from the client.
+ * @returns {void}
+ *
+ * No-op if Firebase was already initialized. After initialization, configures messaging handlers.
  */
 function initializeFirebase(firebaseConfig) {
     if (!firebase.apps.length) {
@@ -179,11 +234,14 @@ function initializeFirebase(firebaseConfig) {
 }
 
 
+// MARK: - Messaging bootstrap
+
 /**
- * Initializes Firebase Messaging and sets the background message handler.
- * 
- * The function retrieves the Firebase Messaging instance and sets the background message handler to `handleBackgroundMessage`.
- * This function should be called after Firebase has been initialized.
+ * Initialize Firebase Messaging and set the background message handler.
+ *
+ * @returns {void}
+ *
+ * Uses the v8 messaging instance, configuring `setBackgroundMessageHandler`.
  */
 function initializeFirebaseMessaging() {
     const messaging = firebase.messaging();
@@ -192,14 +250,15 @@ function initializeFirebaseMessaging() {
 }
 
 
+// MARK: - Background messaging
+
 /**
- * Handles background messages by showing a notification.
- * 
- * @param {Object} payload - The message payload.
- * 
- * The function retrieves the title from the payload data, defaulting to 'New Message' if no title is provided.
- * It then creates a notification options object from the payload data and shows a notification with the title and options.
- * This function is intended to be used as a background message handler for Firebase Messaging.
+ * Handle background messages by showing a notification.
+ *
+ * @param {Object} payload - Raw FCM payload; expects `data` with notification fields.
+ * @returns {Promise<void>} Resolves after the notification is shown.
+ *
+ * Derives the notification title from `payload.data.title` and passes the remaining fields as options.
  */
 function handleBackgroundMessage(payload) {
     const title = payload.data.title || 'New Message';

@@ -1,14 +1,23 @@
+"""
+Client-side Firebase integration for Anvil (Firebase Web SDK v8).
+
+Provides:
+- Models: FirebaseConfig, ActionMap for configuration and action routing.
+- FirebaseClient: wraps Firebase init, messaging, SW registration, and topic/actions.
+"""
+
 import re
 
 import anvil.js
 import anvil.server
-from anvil import *
+from anvil import *  # noqa: F403
 from anvil import Notification
 
 from .client_utils import DEFAULT_SERVICE_WORKER, in_debug
-from .messages import TopicManagementResponse
 from .validators import Validators
 
+
+# MARK: Models & configuration
 
 class FirebaseConfig:
     def __init__(
@@ -49,6 +58,7 @@ class FirebaseConfig:
         )
 
     def to_dict(self) -> dict:
+        """Return Firebase config as a dict in Firebase JS expected casing."""
         return {
             "apiKey": self.api_key,
             "authDomain": self.auth_domain,
@@ -61,6 +71,7 @@ class FirebaseConfig:
 
     @classmethod
     def from_dict(cls, d: dict) -> "FirebaseConfig":
+        """Create a FirebaseConfig from a JS-style dict."""
         return cls(
             api_key=d["apiKey"],
             auth_domain=d["authDomain"],
@@ -145,7 +156,10 @@ class ActionMap:
         return f"{base_url}/{endpoint}"
 
 
+# MARK: Firebase client
+
 class FirebaseClient:
+    """Client wrapper around Firebase Web SDK (v8) for the Anvil client runtime."""
     def __init__(
         self,
         config: FirebaseConfig,
@@ -214,7 +228,7 @@ class FirebaseClient:
 
         self.id = id(self)
 
-    # --- MAGIC METHODS ---
+    # MARK: - Magic methods
 
     def __str__(self):
         return f"FirebaseClient(id={self.id})"
@@ -222,10 +236,20 @@ class FirebaseClient:
     def __repr__(self):
         return f"<{str(self)}>"
 
-    # --- PUBLIC METHODS ---
+    # MARK: - Public methods
 
     def initialize_app(self) -> None:
-        """Initializes the application with necessary configurations."""
+        """Initialize Firebase app/messaging, handlers, and service worker.
+
+        Steps:
+        - firebase.initializeApp(config)
+        - firebase.messaging() and store reference
+        - Register message/token handlers
+        - Register service worker and wire it to messaging
+
+        Returns:
+            False on failure (exception handled internally); otherwise None.
+        """
         try:
             anvil.js.window.firebase.initializeApp(self.config.to_dict())
             self._log("Firebase app initialized.")
@@ -362,19 +386,21 @@ class FirebaseClient:
             )
             return False
 
-    # --- PRIVATE METHODS ---
+    # MARK: - Private methods
 
     def _add_action_maps_to_service_worker(self):
+        """Send all configured ActionMaps to the current service worker."""
         if not self.registration:
             return
 
         for action_map in self.action_maps:
-            self.add_action_map(self.registration, action_map)
+            self.add_action_map(action_map)
             self._log(f"Added action map for {action_map.action_name}.")
 
     def _handle_permission(
         self, permission, notification_str: str = None, timeout: int = 0
     ) -> None:
+        """Handle permission result string and optionally show a prompt."""
         if notification_str is None:
             notification_str = self.allow_notification_str
 
@@ -391,10 +417,12 @@ class FirebaseClient:
             self._log("Notification permission not set.")
 
     def _log(self, message):
+        """Print a log line when with_logging is enabled."""
         if self.with_logging:
             print(f"FirebaseClient Log: {message}")
 
     def _on_message(self, payload):
+        """Convert payload to a Python dict and dispatch to message_handler if set."""
         payload_dict = self._convert_payload_to_dict(payload)
         self._log(f"Message received: {payload_dict}")
 
@@ -407,6 +435,7 @@ class FirebaseClient:
             self._log("No message handler set.")
 
     def _register_service_worker(self):
+        """Register the service worker, send config, and prime token/topics."""
         try:
             self.registration = anvil.js.await_promise(
                 anvil.js.window.navigator.serviceWorker.register(
@@ -425,6 +454,7 @@ class FirebaseClient:
             self._handle_error("registering service worker", e)
 
     def _retrieve_and_save_device_token(self):
+        """Get current FCM token (optionally using VAPID key) and call save handler."""
         token_options = (
             {"vapidKey": self.public_vapid_key} if self.public_vapid_key else {}
         )
@@ -442,6 +472,7 @@ class FirebaseClient:
             self._handle_error("retrieving device token", e)
 
     def _set_service_worker(self):
+        """Bind the Messaging instance to the registered service worker."""
         if not self.registration:
             return
 
@@ -449,22 +480,26 @@ class FirebaseClient:
         self._log("Service worker set.")
 
     def _setup_message_handler(self):
+        """Subscribe to foreground messages and route them to _on_message."""
         self._messaging.onMessage(self._on_message)
         self._log("Message handler set.")
 
     def _setup_token_refresh_handler(self):
+        """Register token refresh callback to persist new tokens."""
         self._messaging.onTokenRefresh(self._retrieve_and_save_device_token)
         self._log("Token refresh handler set.")
 
     def _subscribe_to_topics(self):
+        """Subscribe to all configured topics using the provided handler."""
         if not self.subscribe_handler:
             self._log("No subscribe handler set.")
             return
 
-        for topic in self.topics:
+        for topic in (self.topics or []):
             self.subscribe_to_topic(topic)
 
     def _update_service_worker_firebase_config(self):
+        """Post the Firebase config to the active/waiting/installing service worker."""
         if not self.registration:
             return
 
@@ -483,6 +518,7 @@ class FirebaseClient:
 
     @staticmethod
     def _convert_payload_to_dict(payload):
+        """Best-effort conversion of JS proxy payloads to native Python types."""
         def is_proxy(obj):
             return "proxy" in str(type(obj)).lower()
 
@@ -509,4 +545,10 @@ class FirebaseClient:
 
     @staticmethod
     def _handle_error(action, error):
+        """Print a standardized error line.
+
+        Args:
+            action: Description of the operation that failed.
+            error: Exception or string with error information.
+        """
         print(f"Error {action}: {error}")

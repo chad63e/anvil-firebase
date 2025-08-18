@@ -1,3 +1,85 @@
+# Firebase Cloud Messaging for Anvil — User Guide
+
+This app integrates Firebase Cloud Messaging (FCM) with Anvil. It provides:
+
+- Portable client/server message models (`messages.py`) aligned with FCM Webpush.
+- A server-side wrapper (`FirebaseMessaging`) around `firebase_admin.messaging`.
+- A preconfigured service worker under `theme/assets/fb-service-worker.js`.
+
+Use it to send push notifications to devices, manage topics, and control Webpush options from Anvil.
+
+## Quick Start
+
+1. Configure a Firebase service account and copy the JSON contents.
+2. In the Anvil Editor, add a Secret named `FIREBASE_SERVICE_ACCOUNT_JSON` and paste the JSON string.
+3. In a server module, initialize Firebase Admin and send a test message:
+
+```python
+from .server_utils import FCMServiceAccountCredentials
+from .server import FirebaseMessaging
+from .messages import SimpleMessage, WebpushConfig, WebpushNotification
+import anvil.secrets
+
+fm = FirebaseMessaging()
+creds_json = anvil.secrets.get_secret("FIREBASE_SERVICE_ACCOUNT_JSON")
+creds = FCMServiceAccountCredentials.from_json_string(creds_json)
+fm.initialize_firebase_admin(creds)
+
+# Send to a single token
+msg = SimpleMessage(
+    token="FCM_DEVICE_TOKEN",
+    data={"example": "hello"},
+    webpush=WebpushConfig(
+        notification=WebpushNotification(title="Hello", body="World")
+    ),
+)
+resp = fm.send(msg)
+print(resp)  # Inspect result on the server log
+```
+
+## Usage Examples
+
+### Subscribe/Unsubscribe to Topics
+
+```python
+fm.subscribe_to_topic("news", token)
+fm.unsubscribe_from_topic("news", token)
+```
+
+### Send Multiple Messages (Batch)
+
+```python
+from .messages import Message
+
+messages = [
+    Message(token=t, data={"k": "v"})
+    for t in ["token1", "token2"]
+]
+batch = fm.send_all(messages)
+print(batch)
+```
+
+### Send Multicast Message
+
+```python
+from .messages import MulticastMessage
+
+multi = MulticastMessage(
+    tokens=["token1", "token2"],
+    data={"k": "v"},
+)
+batch = fm.send_multicast(multi)
+```
+
+## Notes and Troubleshooting
+
+- Ensure your service account has permission to use FCM.
+- Tokens must be current/valid; handle client token refresh appropriately.
+- The service worker at `theme/assets/fb-service-worker.js` handles Webpush events.
+- Data payload values are coerced to strings by the server for FCM compliance.
+
+---
+
 # About This [Anvil](https://anvil.works/?utm_source=github:app_README) App
 
 ### Build web apps with nothing but Python.

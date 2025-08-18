@@ -1,9 +1,20 @@
+"""
+Server-side utilities for Firebase Cloud Messaging (FCM).
+
+Provides a dataclass for FCM service account credentials along with helpers
+for serialization and creating a temporary credentials file path suitable for
+initializing the Firebase Admin SDK.
+"""
+
 import json
 import re
 import tempfile
 from dataclasses import dataclass
 
-from firebase_admin import credentials, initialize_app, messaging
+from firebase_admin import credentials, initialize_app, messaging  # noqa: F401
+
+# MARK: Service account credentials
+
 
 @dataclass
 class FCMServiceAccountCredentials:
@@ -40,6 +51,7 @@ class FCMServiceAccountCredentials:
     universe_domain: str
 
     def to_dict(self):
+        """Return the credential fields as a JSON-serializable dict."""
         return {
             "type": self.type,
             "project_id": self.project_id,

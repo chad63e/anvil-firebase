@@ -1,8 +1,17 @@
+"""
+Server-side Firebase Cloud Messaging (FCM) wrapper and helpers.
+
+Exposes a thin wrapper around firebase_admin.messaging to initialize the
+Admin SDK, send messages (single, batch, multicast), and manage topic
+subscriptions. Includes helpers to compile client-side portable classes
+to the firebase_admin equivalents.
+"""
+
 from typing import Optional, Union
 
 import anvil.media
 import anvil.secrets
-import anvil.server
+import anvil.server  # noqa: F401
 import firebase_admin
 from firebase_admin import credentials, initialize_app, messaging
 
@@ -20,12 +29,16 @@ from .messages import (
 )
 from .server_utils import FCMServiceAccountCredentials
 
+# MARK: Firebase messaging service
+
 
 class FirebaseMessaging:
+    """Wrapper around firebase_admin.messaging operations with utilities."""
+
     def __init__(self, with_logging: Optional[bool] = True):
         self.with_logging = with_logging
 
-    # --- PUBLIC METHODS ---
+    # MARK: - Public methods
 
     def initialize_firebase_admin(
         self, service_account_creds: FCMServiceAccountCredentials
@@ -58,7 +71,7 @@ class FirebaseMessaging:
         - token (str): The FCM device token of the device.
 
         Returns:
-        messaging.TopicManagementResponse: The response from the FCM server.
+        TopicManagementResponse: The response from the FCM server.
         """
         fcm_response = messaging.subscribe_to_topic(token, topic)
         response = TopicManagementResponse.from_fcm_response(fcm_response)
@@ -82,7 +95,7 @@ class FirebaseMessaging:
         - token (str): The FCM device token of the device.
 
         Returns:
-        messaging.TopicManagementResponse: The response from the FCM server.
+        TopicManagementResponse: The response from the FCM server.
         """
         fcm_response = messaging.unsubscribe_from_topic(token, topic)
         response = TopicManagementResponse.from_fcm_response(fcm_response)
@@ -102,11 +115,11 @@ class FirebaseMessaging:
         Sends a message to the FCM server.
 
         Parameters:
-        - message (Union[Message, MulticastMessage, SimpleMessage]): The message to send.
+        - message (Union[Message, SimpleMessage]): The message to send.
         - dry_run (bool): Whether to send the message in the dry run mode.
 
         Returns:
-        messaging.BatchResponse: The response from the FCM server.
+        Response: The response from the FCM server.
         """
 
         if not isinstance(message, (Message, SimpleMessage)):
@@ -139,7 +152,7 @@ class FirebaseMessaging:
         - dry_run (bool): Whether to send the messages in the dry run mode.
 
         Returns:
-        messaging.BatchResponse: The response from the FCM server.
+        BatchResponse: The response from the FCM server.
         """
 
         if not all(
@@ -171,7 +184,7 @@ class FirebaseMessaging:
         - dry_run (bool): Whether to send the message in the dry run mode.
 
         Returns:
-        messaging.BatchResponse: The response from the FCM server.
+        BatchResponse: The response from the FCM server.
         """
 
         if not isinstance(message, MulticastMessage):
@@ -186,9 +199,10 @@ class FirebaseMessaging:
 
         return response
 
-    # --- PRIVATE METHODS ---
+    # MARK: - Private methods
 
     def _compile_webpush_notification_actions(self, message_dict: dict):
+        """Build WebpushNotificationAction list for Admin SDK or None."""
         actions = message_dict.get("actions") or []
         fcm_actions = []
         for action in actions:
@@ -202,6 +216,7 @@ class FirebaseMessaging:
             return None
 
     def _compile_webpush_notification(self, message_dict: dict):
+        """Convert our WebpushNotification/dict to Admin SDK notification or None."""
         notification = message_dict.get("notification")
         if isinstance(notification, WebpushNotification):
             notification = notification.to_dict()
@@ -215,6 +230,7 @@ class FirebaseMessaging:
             return None
 
     def _compile_webpush_config(self, message_dict: dict):
+        """Convert our WebpushConfig/dict to Admin SDK WebpushConfig or None."""
         webpush = message_dict.get("webpush")
 
         if isinstance(webpush, WebpushConfig):
@@ -228,6 +244,7 @@ class FirebaseMessaging:
             return None
 
     def _compile_fcm_options(self, message_dict: dict):
+        """Convert our WebpushFCMOptions/dict to Admin SDK options or None."""
         fcm_options = message_dict.get("fcm_options")
         if isinstance(fcm_options, WebpushFCMOptions):
             fcm_options = fcm_options.to_dict()
@@ -238,6 +255,7 @@ class FirebaseMessaging:
             return None
 
     def _compile_message(self, message: Union[Message, SimpleMessage]):
+        """Compile Message/SimpleMessage to firebase_admin.messaging.Message."""
         message_dict = message.to_dict()
 
         token = message_dict.get("token")
@@ -253,6 +271,7 @@ class FirebaseMessaging:
         )
 
     def _compile_multicast_message(self, message: MulticastMessage):
+        """Compile MulticastMessage to firebase_admin.messaging.MulticastMessage."""
         message_dict = message.to_dict()
 
         return messaging.MulticastMessage(
@@ -263,6 +282,7 @@ class FirebaseMessaging:
         )
 
     def _process_data(self, data: dict) -> dict:
+        """Coerce whitelisted key/value types to strings for Admin SDK."""
         if not isinstance(data, dict):
             return {}
 
@@ -274,5 +294,6 @@ class FirebaseMessaging:
         }
 
     def _log(self, message: str) -> None:
+        """Print log line if logging is enabled."""
         if self.with_logging:
             print(message)

@@ -1,5 +1,5 @@
-import anvil.server
-from anvil import *
+import anvil.server  # noqa: F401
+from anvil import *  # noqa: F403
 from anvil.js import window
 
 from ._anvil_designer import Form1Template
