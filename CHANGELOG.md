@@ -24,6 +24,7 @@ This project adheres to Keep a Changelog format and Semantic Versioning where pr
 - Ensured `BatchResponse.from_fcm_response()` compiles entries from the collected response list consistently (internal cleanup; no external behavior change).
  - Guarded `client_code/client.py` `_add_action_maps_to_service_worker()` against `None` `action_maps` to prevent a potential `TypeError` during permission grant.
  - `request_notification_permission()` now returns the final permission status after any interactive re-prompt (reads `Notification.permission`), ensuring accurate boolean results.
+ - Prevented interactive alert loop by only prompting when permission is `default`; for `denied`, show a passive `Notification` and stop re-requesting.
 
 ### Notes
  - Behavior change: users see an interactive prompt instead of only a passive notification on denied/default permission states.

@@ -423,34 +423,41 @@ class FirebaseClient:
             self._log("Notification permission granted.")
             return
 
-        # For 'denied' or 'default' (not set), present an interactive alert
-        # allowing the user to re-request permission.
-        try:
-            choice = alert(
-                notification_str,
-                buttons=[("Enable now", "enable"), "Dismiss"],
-            )
-        except Exception:
-            # Fallback to a passive Notification if alert fails
+        # Only show interactive alert when permission is 'default' (not yet decided).
+        if permission == "default":
+            try:
+                choice = alert(
+                    notification_str,
+                    buttons=[("Enable now", "enable"), "Dismiss"],
+                )
+            except Exception:
+                # Fallback to a passive Notification if alert fails
+                try:
+                    Notification(notification_str, timeout=timeout).show()
+                except Exception as e2:
+                    self._handle_error("showing notification", e2)
+                self._log("Notification permission not granted; alert unavailable.")
+                return
+
+            if choice == "enable":
+                try:
+                    # Re-request permission; this will re-enter _handle_permission.
+                    self.request_notification_permission()
+                except Exception as e:
+                    self._handle_error("re-requesting notification permission", e)
+            else:
+                # User dismissed our prompt; leave as-is.
+                self._log("Notification permission not set.")
+            return
+
+        # If permission is 'denied', avoid interactive loop; show passive notice and stop.
+        if permission == "denied":
             try:
                 Notification(notification_str, timeout=timeout).show()
             except Exception as e2:
                 self._handle_error("showing notification", e2)
-            self._log("Notification permission not granted; alert unavailable.")
+            self._log("Notification permission denied.")
             return
-
-        if choice == "enable":
-            try:
-                # Re-request permission; this will re-enter _handle_permission.
-                self.request_notification_permission()
-            except Exception as e:
-                self._handle_error("re-requesting notification permission", e)
-        else:
-            # User dismissed our prompt; leave as-is.
-            if permission == "denied":
-                self._log("Notification permission denied.")
-            else:
-                self._log("Notification permission not set.")
 
     def _log(self, message):
         """Print a log line when with_logging is enabled."""
