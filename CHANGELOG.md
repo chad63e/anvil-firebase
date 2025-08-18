@@ -3,7 +3,6 @@
 All notable changes to this project will be documented in this file.
 This project adheres to Keep a Changelog format and Semantic Versioning where practical.
 
-
 ## [1.0.4] - 2025-08-18
 
 ### Added
@@ -17,14 +16,19 @@ This project adheres to Keep a Changelog format and Semantic Versioning where pr
 ### Changed
 - Corrected public method docstrings in `server_code/server.py` to reference portable types and correct unions.
 - Replaced accidental `// MARK:` with Python `# MARK:` comments.
+ - `client_code/client.py`: `_handle_permission()` now presents an interactive alert with an "Enable now" button when notification permission is denied or not set. If `alert()` is unavailable, it falls back to a passive `Notification`.
+ - On permission "granted", the client now wires ActionMaps and immediately attempts to retrieve and save the device token.
 
 ### Fixed
 - Addressed a lint warning (Ruff F841) in `client_code/messages.py` by avoiding variable shadowing in `BatchResponse.from_fcm_response()`.
 - Ensured `BatchResponse.from_fcm_response()` compiles entries from the collected response list consistently (internal cleanup; no external behavior change).
+ - Guarded `client_code/client.py` `_add_action_maps_to_service_worker()` against `None` `action_maps` to prevent a potential `TypeError` during permission grant.
+ - `request_notification_permission()` now returns the final permission status after any interactive re-prompt (reads `Notification.permission`), ensuring accurate boolean results.
 
 ### Notes
-- No behavior changes; this release focuses on documentation and maintainability.
-- Continues to follow the Unicode Symbol Policy (no Unicode in print statements) and Ruff linting configuration.
+ - Behavior change: users see an interactive prompt instead of only a passive notification on denied/default permission states.
+ - App code can rely on the library for permission prompting and token retrieval; remove redundant app-level prompts if present.
+ - Continues to follow the Unicode Symbol Policy (no Unicode in print statements) and Ruff linting configuration.
 
 ## [1.0.3] - 2024-03-27
 

@@ -11,13 +11,13 @@ import re
 import anvil.js
 import anvil.server
 from anvil import *  # noqa: F403
-from anvil import Notification
+from anvil import Notification, alert
 
 from .client_utils import DEFAULT_SERVICE_WORKER, in_debug
 from .validators import Validators
 
-
 # MARK: Models & configuration
+
 
 class FirebaseConfig:
     def __init__(
@@ -158,8 +158,10 @@ class ActionMap:
 
 # MARK: Firebase client
 
+
 class FirebaseClient:
     """Client wrapper around Firebase Web SDK (v8) for the Anvil client runtime."""
+
     def __init__(
         self,
         config: FirebaseConfig,
@@ -282,7 +284,14 @@ class FirebaseClient:
             )
             self._log(f"Permission status: {permission}")
             self._handle_permission(permission)
-            response = True if permission == "granted" else False
+            # After handling (which may involve an interactive re-prompt),
+            # check the final permission to return an accurate boolean.
+            try:
+                final_permission = anvil.js.window.Notification.permission
+            except Exception:
+                final_permission = permission
+            self._log(f"Final permission status: {final_permission}")
+            response = True if final_permission == "granted" else False
         except Exception as e:
             self._handle_error("requesting notification permission", e)
             response = False
@@ -393,7 +402,7 @@ class FirebaseClient:
         if not self.registration:
             return
 
-        for action_map in self.action_maps:
+        for action_map in (self.action_maps or []):
             self.add_action_map(action_map)
             self._log(f"Added action map for {action_map.action_name}.")
 
@@ -404,17 +413,44 @@ class FirebaseClient:
         if notification_str is None:
             notification_str = self.allow_notification_str
 
-        if permission == "denied":
+        if permission == "granted":
+            # On grant, wire action maps and immediately try to fetch/save a token.
+            self._add_action_maps_to_service_worker()
+            try:
+                self._retrieve_and_save_device_token()
+            except Exception as e:
+                self._handle_error("retrieving device token after grant", e)
+            self._log("Notification permission granted.")
+            return
+
+        # For 'denied' or 'default' (not set), present an interactive alert
+        # allowing the user to re-request permission.
+        try:
+            choice = alert(
+                notification_str,
+                buttons=[("Enable now", "enable"), "Dismiss"],
+            )
+        except Exception:
+            # Fallback to a passive Notification if alert fails
             try:
                 Notification(notification_str, timeout=timeout).show()
+            except Exception as e2:
+                self._handle_error("showing notification", e2)
+            self._log("Notification permission not granted; alert unavailable.")
+            return
+
+        if choice == "enable":
+            try:
+                # Re-request permission; this will re-enter _handle_permission.
+                self.request_notification_permission()
             except Exception as e:
-                self._handle_error("showing notification", e)
-            self._log("Notification permission denied.")
-        elif permission == "granted":
-            self._add_action_maps_to_service_worker()
-            self._log("Notification permission granted.")
+                self._handle_error("re-requesting notification permission", e)
         else:
-            self._log("Notification permission not set.")
+            # User dismissed our prompt; leave as-is.
+            if permission == "denied":
+                self._log("Notification permission denied.")
+            else:
+                self._log("Notification permission not set.")
 
     def _log(self, message):
         """Print a log line when with_logging is enabled."""
@@ -495,7 +531,7 @@ class FirebaseClient:
             self._log("No subscribe handler set.")
             return
 
-        for topic in (self.topics or []):
+        for topic in self.topics or []:
             self.subscribe_to_topic(topic)
 
     def _update_service_worker_firebase_config(self):
@@ -519,6 +555,7 @@ class FirebaseClient:
     @staticmethod
     def _convert_payload_to_dict(payload):
         """Best-effort conversion of JS proxy payloads to native Python types."""
+
         def is_proxy(obj):
             return "proxy" in str(type(obj)).lower()
 
