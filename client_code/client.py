@@ -488,17 +488,9 @@ class FirebaseClient:
 
             self._log("Service worker registered.")
 
-            # Ensure the service worker is fully active/ready before proceeding.
-            try:
-                ready_registration = anvil.js.await_promise(
-                    anvil.js.window.navigator.serviceWorker.ready
-                )
-                if ready_registration:
-                    self.registration = ready_registration
-                    self._log("Service worker ready.")
-            except Exception:
-                # Non-fatal: continue with the existing registration
-                pass
+            # NOTE: Do not override our registration with navigator.serviceWorker.ready
+            # because in the Anvil IDE a global SW may control the page. We must
+            # keep the specific registration we just made for the Firebase SW.
 
             self._set_service_worker()
             self._update_service_worker_firebase_config()
