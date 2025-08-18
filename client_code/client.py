@@ -488,6 +488,18 @@ class FirebaseClient:
 
             self._log("Service worker registered.")
 
+            # Ensure the service worker is fully active/ready before proceeding.
+            try:
+                ready_registration = anvil.js.await_promise(
+                    anvil.js.window.navigator.serviceWorker.ready
+                )
+                if ready_registration:
+                    self.registration = ready_registration
+                    self._log("Service worker ready.")
+            except Exception:
+                # Non-fatal: continue with the existing registration
+                pass
+
             self._set_service_worker()
             self._update_service_worker_firebase_config()
 
@@ -501,14 +513,22 @@ class FirebaseClient:
         token_options = (
             {"vapidKey": self.public_vapid_key} if self.public_vapid_key else {}
         )
+        # Explicitly pass the service worker registration when available.
+        if self.registration:
+            token_options["serviceWorkerRegistration"] = self.registration
 
         try:
+            self._log(
+                f"Retrieving device token; VAPID configured: {bool(self.public_vapid_key)}"
+            )
             token = anvil.js.await_promise(self._messaging.getToken(token_options))
             self.token = token or None
 
             if self.token and self.save_token_handler:
                 self.save_token_handler(self.token)
                 self._log("Device token saved.")
+                # Ensure topic subscriptions occur once a token is available
+                self._subscribe_to_topics()
             else:
                 self._log("Device token not saved.")
         except Exception as e:
@@ -536,6 +556,10 @@ class FirebaseClient:
         """Subscribe to all configured topics using the provided handler."""
         if not self.subscribe_handler:
             self._log("No subscribe handler set.")
+            return
+
+        if not self.token:
+            self._log("Token not available; skipping topic subscriptions.")
             return
 
         for topic in self.topics or []:
