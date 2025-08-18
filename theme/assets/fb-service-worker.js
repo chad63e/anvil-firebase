@@ -78,6 +78,14 @@ function handleMessageEvent(event) {
     try {
         if (event.data.type === 'SET_FIREBASE_CONFIG') {
             initializeFirebase(event.data.firebaseConfig);
+            try {
+                // Ensure messaging is initialized so background handlers are wired.
+                initializeFirebaseMessaging();
+                // Basic diagnostic to confirm SW-side init
+                console.log('Firebase Messaging initialized in service worker.');
+            } catch (e) {
+                console.error('Error initializing Firebase Messaging in SW:', e);
+            }
         } else if (event.data.type === 'ADD_ACTION_MAP') {
             actionMaps[event.data.actionName] = {
                 url: event.data.fullUrl,

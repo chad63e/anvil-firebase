@@ -487,6 +487,23 @@ class FirebaseClient:
             )
 
             self._log("Service worker registered.")
+            try:
+                scope = getattr(self.registration, "scope", None)
+                if scope:
+                    self._log(f"Service worker scope: {scope}")
+                try:
+                    sw = (
+                        self.registration.active
+                        or self.registration.waiting
+                        or self.registration.installing
+                    )
+                    script_url = getattr(sw, "scriptURL", None)
+                    if script_url:
+                        self._log(f"Service worker script: {script_url}")
+                except Exception:
+                    pass
+            except Exception:
+                pass
 
             # NOTE: Do not override our registration with navigator.serviceWorker.ready
             # because in the Anvil IDE a global SW may control the page. We must
@@ -510,6 +527,28 @@ class FirebaseClient:
             token_options["serviceWorkerRegistration"] = self.registration
 
         try:
+            # Guard: ensure messaging is supported and set VAPID via v8 API for compatibility
+            try:
+                is_supported = anvil.js.window.firebase.messaging.isSupported()
+            except Exception:
+                is_supported = True
+            self._log(f"Messaging supported: {is_supported}")
+            if not is_supported:
+                self._handle_error(
+                    "retrieving device token", "Firebase messaging not supported in this browser"
+                )
+                return
+            if self.public_vapid_key:
+                try:
+                    # v8 compatibility path
+                    self._messaging.usePublicVapidKey(self.public_vapid_key)
+                    prefix = (self.public_vapid_key or "")[:8]
+                    self._log(
+                        f"VAPID key set (prefix='{prefix}', len={len(self.public_vapid_key)})"
+                    )
+                except Exception as e:
+                    self._handle_error("setting VAPID key", e)
+
             self._log(
                 f"Retrieving device token; VAPID configured: {bool(self.public_vapid_key)}"
             )
@@ -524,7 +563,51 @@ class FirebaseClient:
             else:
                 self._log("Device token not saved.")
         except Exception as e:
-            self._handle_error("retrieving device token", e)
+            # Attempt a one-time cleanup of any existing PushSubscription and retry getToken.
+            msg = str(e).lower()
+            should_retry = (
+                "aborterror" in msg
+                or "push service error" in msg
+                or "applicationserverkey" in msg
+            )
+            if should_retry:
+                self._log(
+                    "Detected push subscription error; attempting to unsubscribe existing subscription and retry."
+                )
+                try:
+                    if self.registration and getattr(self.registration, "pushManager", None):
+                        sub = anvil.js.await_promise(
+                            self.registration.pushManager.getSubscription()
+                        )
+                        if sub:
+                            ok = anvil.js.await_promise(sub.unsubscribe())
+                            self._log(
+                                f"Existing push subscription unsubscribed: {bool(ok)}"
+                            )
+                except Exception as e2:
+                    self._handle_error(
+                        "unsubscribing existing push subscription", e2
+                    )
+
+                # Retry once
+                try:
+                    token = anvil.js.await_promise(
+                        self._messaging.getToken(token_options)
+                    )
+                    self.token = token or None
+
+                    if self.token and self.save_token_handler:
+                        self.save_token_handler(self.token)
+                        self._log("Device token saved (after retry).")
+                        self._subscribe_to_topics()
+                    else:
+                        self._log("Device token not saved (after retry).")
+                except Exception as e3:
+                    self._handle_error(
+                        "retrieving device token (after retry)", e3
+                    )
+            else:
+                self._handle_error("retrieving device token", e)
 
     def _set_service_worker(self):
         """Bind the Messaging instance to the registered service worker."""
