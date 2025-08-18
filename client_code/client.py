@@ -229,6 +229,9 @@ class FirebaseClient:
         )
 
         self.id = id(self)
+        # Internal flags
+        self._vapid_set = False
+        self._token_request_in_flight = False
 
     # MARK: - Magic methods
 
@@ -258,6 +261,18 @@ class FirebaseClient:
 
             self._messaging = anvil.js.window.firebase.messaging()
             self._log("Firebase messaging service initialized.")
+
+            # Configure VAPID key once (v8 API requirement: before any getToken calls)
+            if self.public_vapid_key and not self._vapid_set:
+                try:
+                    self._messaging.usePublicVapidKey(self.public_vapid_key)
+                    prefix = (self.public_vapid_key or "")[:8]
+                    self._log(
+                        f"VAPID key set (prefix='{prefix}', len={len(self.public_vapid_key)})"
+                    )
+                    self._vapid_set = True
+                except Exception as e:
+                    self._handle_error("setting VAPID key", e)
 
             self._setup_message_handler()
             self._setup_token_refresh_handler()
@@ -511,22 +526,33 @@ class FirebaseClient:
 
             self._set_service_worker()
             self._update_service_worker_firebase_config()
-
-            self._retrieve_and_save_device_token()
-            self._subscribe_to_topics()
+            # Retrieve token only if permission already granted; otherwise wait
+            # for request_notification_permission() to complete.
+            try:
+                perm = anvil.js.window.Notification.permission
+            except Exception:
+                perm = None
+            self._log(f"Notification permission at SW register time: {perm}")
+            if perm == "granted":
+                self._retrieve_and_save_device_token()
         except Exception as e:
             self._handle_error("registering service worker", e)
 
     def _retrieve_and_save_device_token(self):
         """Get current FCM token (optionally using VAPID key) and call save handler."""
-        token_options = (
-            {"vapidKey": self.public_vapid_key} if self.public_vapid_key else {}
-        )
+        # VAPID is configured once via usePublicVapidKey during initialize_app
+        token_options = {}
         # Explicitly pass the service worker registration when available.
         if self.registration:
             token_options["serviceWorkerRegistration"] = self.registration
 
         try:
+            # Prevent concurrent token requests which can lead to confusing state/errors
+            if self._token_request_in_flight:
+                self._log("Token retrieval already in flight; skipping.")
+                return
+            self._token_request_in_flight = True
+
             # Guard: ensure messaging is supported and set VAPID via v8 API for compatibility
             try:
                 is_supported = anvil.js.window.firebase.messaging.isSupported()
@@ -538,16 +564,6 @@ class FirebaseClient:
                     "retrieving device token", "Firebase messaging not supported in this browser"
                 )
                 return
-            if self.public_vapid_key:
-                try:
-                    # v8 compatibility path
-                    self._messaging.usePublicVapidKey(self.public_vapid_key)
-                    prefix = (self.public_vapid_key or "")[:8]
-                    self._log(
-                        f"VAPID key set (prefix='{prefix}', len={len(self.public_vapid_key)})"
-                    )
-                except Exception as e:
-                    self._handle_error("setting VAPID key", e)
 
             self._log(
                 f"Retrieving device token; VAPID configured: {bool(self.public_vapid_key)}"
@@ -608,6 +624,8 @@ class FirebaseClient:
                     )
             else:
                 self._handle_error("retrieving device token", e)
+        finally:
+            self._token_request_in_flight = False
 
     def _set_service_worker(self):
         """Bind the Messaging instance to the registered service worker."""
