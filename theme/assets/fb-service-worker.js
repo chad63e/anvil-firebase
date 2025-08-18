@@ -34,6 +34,9 @@ self.addEventListener('activate', (event) => {
 });
 self.addEventListener('message', handleMessageEvent);
 self.addEventListener('notificationclick', handleNotificationClickEvent);
+// Register push-related handlers at initial evaluation to satisfy browser requirements.
+self.addEventListener('push', handlePushEvent);
+self.addEventListener('pushsubscriptionchange', handlePushSubscriptionChangeEvent);
 
 
 // MARK: - Types
@@ -112,6 +115,39 @@ function handleNotificationClickEvent(event) {
     }
 
     event.notification.close();
+}
+
+
+// MARK: - Push event handlers
+
+/**
+ * Handle 'push' events by delegating to the background message handler.
+ * Ensures the handler is present at initial evaluation time without relying on
+ * late-installed Firebase messaging listeners.
+ *
+ * @param {PushEvent} event
+ * @returns {void}
+ */
+function handlePushEvent(event) {
+    try {
+        const payload = event.data ? event.data.json() : {};
+        event.waitUntil(handleBackgroundMessage(payload));
+    } catch (error) {
+        console.error('Error handling push event:', error);
+    }
+}
+
+/**
+ * Handle 'pushsubscriptionchange' events. This implementation logs the event.
+ * Re-subscription logic can be added if a VAPID key is available in worker scope.
+ *
+ * @param {PushSubscriptionChangeEvent} event
+ * @returns {void}
+ */
+function handlePushSubscriptionChangeEvent(event) {
+    // No-op; add re-subscribe logic here if desired.
+    // Keeping a listener registered at initial evaluation prevents browser warnings.
+    console.log('pushsubscriptionchange event detected');
 }
 
 
@@ -228,8 +264,6 @@ function initializeFirebase(firebaseConfig) {
             appId: firebaseConfig.appId,
             measurementId: firebaseConfig.measurementId,
         });
-
-        initializeFirebaseMessaging();
     }
 }
 
@@ -261,8 +295,11 @@ function initializeFirebaseMessaging() {
  * Derives the notification title from `payload.data.title` and passes the remaining fields as options.
  */
 function handleBackgroundMessage(payload) {
-    const title = payload.data.title || 'New Message';
-    const options = { ...payload.data };
+    const data = (payload && payload.data) ? payload.data : {};
+    const notification = (payload && payload.notification) ? payload.notification : {};
+
+    const title = data.title || notification.title || 'New Message';
+    const options = { ...notification, ...data };
 
     return self.registration.showNotification(title, options);
 }
