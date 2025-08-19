@@ -495,6 +495,7 @@ class FirebaseClient:
     def _register_service_worker(self):
         """Register the service worker, send config, and prime token/topics."""
         try:
+            self._log(f"Registering service worker: {self.service_worker_url}")
             self.registration = anvil.js.await_promise(
                 anvil.js.window.navigator.serviceWorker.register(
                     self.service_worker_url
@@ -545,6 +546,9 @@ class FirebaseClient:
         # Explicitly pass the service worker registration when available.
         if self.registration:
             token_options["serviceWorkerRegistration"] = self.registration
+        # Also pass vapidKey explicitly (v7+/v8 API supports this) to avoid any ambiguity
+        if self.public_vapid_key:
+            token_options["vapidKey"] = self.public_vapid_key
 
         try:
             # Prevent concurrent token requests which can lead to confusing state/errors
@@ -565,8 +569,12 @@ class FirebaseClient:
                 )
                 return
 
+            try:
+                option_keys = ", ".join(sorted(token_options.keys()))
+            except Exception:
+                option_keys = str(list(token_options.keys()))
             self._log(
-                f"Retrieving device token; VAPID configured: {bool(self.public_vapid_key)}"
+                f"Retrieving device token; VAPID configured: {bool(self.public_vapid_key)}; token_options: {option_keys}"
             )
             token = anvil.js.await_promise(self._messaging.getToken(token_options))
             self.token = token or None
