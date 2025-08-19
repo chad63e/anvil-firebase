@@ -78,6 +78,23 @@ batch = fm.send_multicast(multi)
 - The service worker at `theme/assets/fb-service-worker.js` handles Webpush events.
 - Data payload values are coerced to strings by the server for FCM compliance.
 
+## Browser Compatibility (Microsoft Edge)
+
+- Supported: Chromium-based Edge 79+.
+- Not supported: Legacy Edge (EdgeHTML).
+- Permissions: Allow Notifications for your site (edge://settings/content/notifications). Windows Focus Assist/Do Not Disturb can suppress toasts; check the Action Center if you do not see a banner.
+- Service worker scope: This app serves the worker at `/_/theme/fb-service-worker.js` and binds it with `messaging.useServiceWorker(...)`, which is supported in Edge.
+- VAPID key: Edge requires `applicationServerKey` to be a Uint8Array. The client library handles this automatically. If testing manually with `PushManager.subscribe(...)`, convert your base64url public VAPID key to a Uint8Array first.
+- InPrivate: InPrivate windows can restrict service worker persistence and notifications. Test in a normal profile.
+- Updating the worker: After edits, reload the app or use DevTools → Application → Service Workers to "Update"/"Skip waiting". You can also unregister and reload.
+
+Troubleshooting on Edge:
+
+- Verify a service worker is active (DevTools → Application → Service Workers).
+- Confirm `navigator.serviceWorker.ready` resolves and the registration scope includes `/_/theme/`.
+- Check the Console for errors (DevTools, or edge://serviceworker-internals).
+- If `InvalidAccessError` occurs when subscribing, regenerate the Web Push VAPID key and make sure you are using the Firebase Cloud Messaging Web Push public key.
+
 ---
 
 # About This [Anvil](https://anvil.works/?utm_source=github:app_README) App

@@ -417,7 +417,7 @@ class FirebaseClient:
         if not self.registration:
             return
 
-        for action_map in (self.action_maps or []):
+        for action_map in self.action_maps or []:
             self.add_action_map(action_map)
             self._log(f"Added action map for {action_map.action_name}.")
 
@@ -565,7 +565,8 @@ class FirebaseClient:
             self._log(f"Messaging supported: {is_supported}")
             if not is_supported:
                 self._handle_error(
-                    "retrieving device token", "Firebase messaging not supported in this browser"
+                    "retrieving device token",
+                    "Firebase messaging not supported in this browser",
                 )
                 return
 
@@ -599,7 +600,9 @@ class FirebaseClient:
                     "Detected push subscription error; attempting to unsubscribe existing subscription and retry."
                 )
                 try:
-                    if self.registration and getattr(self.registration, "pushManager", None):
+                    if self.registration and getattr(
+                        self.registration, "pushManager", None
+                    ):
                         sub = anvil.js.await_promise(
                             self.registration.pushManager.getSubscription()
                         )
@@ -609,9 +612,7 @@ class FirebaseClient:
                                 f"Existing push subscription unsubscribed: {bool(ok)}"
                             )
                 except Exception as e2:
-                    self._handle_error(
-                        "unsubscribing existing push subscription", e2
-                    )
+                    self._handle_error("unsubscribing existing push subscription", e2)
 
                 # Retry once
                 try:
@@ -627,9 +628,7 @@ class FirebaseClient:
                     else:
                         self._log("Device token not saved (after retry).")
                 except Exception as e3:
-                    self._handle_error(
-                        "retrieving device token (after retry)", e3
-                    )
+                    self._handle_error("retrieving device token (after retry)", e3)
             else:
                 self._handle_error("retrieving device token", e)
         finally:
